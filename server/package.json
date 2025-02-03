@@ -6,7 +6,8 @@
   "scripts": {
     "start": "nodemon index.js",
     "dev": "nodemon src/index.ts",
-    "build": "tsc -p ."
+    "build": "tsc -p .",
+     "postinstall": "npm install node-pre-gyp && npm run build"
     },
   "engines": {
     "node": "16",
