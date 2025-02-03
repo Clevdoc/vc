@@ -168,7 +168,62 @@ const io = socketio(server, {
 });
 
 io.sockets.on("connection", (socket) => {
-  socket.on("joinRoom", (data) => {
+  socket.on("senderOffer", async (data) => {
+    try {
+      const senderSocketID = data.senderSocketID || socket.id;  // Fallback to socket.id if not provided
+      console.log(`[${data.roomID}] Received sender offer from ${data.username} (${senderSocketID})`);
+      
+      let pc = createReceiverPeerConnection(
+        senderSocketID,
+        socket,
+        data.roomID,
+        data.username
+      );
+      
+      await pc.setRemoteDescription(data.sdp);
+      let sdp = await pc.createAnswer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
+      await pc.setLocalDescription(sdp);
+      
+      socket.join(data.roomID);
+      io.to(senderSocketID).emit("getSenderAnswer", { sdp });
+    } catch (error) {
+      console.error(`[${data?.roomID}] Error in senderOffer:`, error);
+    }
+  });
+
+  socket.on("receiverOffer", async (data) => {
+    try {
+      const { senderSocketID, receiverSocketID, roomID, username } = data;
+      console.log(`[${roomID}] Received receiver offer from ${username} (${receiverSocketID}) to ${senderSocketID}`);
+      
+      let pc = createSenderPeerConnection(
+        receiverSocketID,
+        senderSocketID,
+        socket,
+        roomID,
+        username
+      );
+      
+      await pc.setRemoteDescription(data.sdp);
+      let sdp = await pc.createAnswer({
+        offerToReceiveAudio: false,
+        offerToReceiveVideo: false,
+      });
+      await pc.setLocalDescription(sdp);
+      
+      io.to(receiverSocketID).emit("getReceiverAnswer", {
+        id: senderSocketID,
+        sdp,
+      });
+    } catch (error) {
+      console.error(`[${data?.roomID}] Error in receiverOffer:`, error);
+    }
+  });
+
+  socket.on("joinRoom", async (data) => {
     try {
       const { roomID, username } = data;
       
@@ -186,18 +241,21 @@ io.sockets.on("connection", (socket) => {
       }
       
       // Remove any existing entries for this user
-      users[roomID] = users[roomID].filter(user => user.id !== socket.id);
+      users[roomID] = users[roomID].filter(user => 
+        user.id && user.id !== socket.id && user.username !== username
+      );
       
       // Add user to room
-      users[roomID].push({
+      const newUser = {
         id: socket.id,
         username: username,
         stream: null // Stream will be added when tracks are received
-      });
+      };
+      users[roomID].push(newUser);
       
       // Get existing users (excluding the current user)
       let allUsers = users[roomID]
-        .filter(user => user.id !== socket.id && user.id) // Only include users with valid IDs
+        .filter(user => user.id && user.id !== socket.id)
         .map(user => ({
           id: user.id,
           username: user.username
@@ -228,59 +286,10 @@ io.sockets.on("connection", (socket) => {
     }
   });
 
-  socket.on("senderOffer", async (data) => {
-    try {
-      console.log(`[${data.roomID}] Received sender offer from ${data.username} (${data.senderSocketID})`);
-      
-      let pc = createReceiverPeerConnection(
-        data.senderSocketID,
-        socket,
-        data.roomID,
-        data.username
-      );
-      
-      await pc.setRemoteDescription(data.sdp);
-      let sdp = await pc.createAnswer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true,
-      });
-      await pc.setLocalDescription(sdp);
-      
-      socket.join(data.roomID);
-      io.to(data.senderSocketID).emit("getSenderAnswer", { sdp });
-    } catch (error) {
-      console.error(`[${data?.roomID}] Error in senderOffer:`, error);
-    }
-  });
-
   socket.on("senderCandidate", async (data) => {
     try {
       let pc = receiverPCs[data.senderSocketID];
       await pc.addIceCandidate(new wrtc.RTCIceCandidate(data.candidate));
-    } catch (error) {
-      console.log(error);
-    }
-  });
-
-  socket.on("receiverOffer", async (data) => {
-    try {
-      let pc = createSenderPeerConnection(
-        data.receiverSocketID,
-        data.senderSocketID,
-        socket,
-        data.roomID,
-        data.username
-      );
-      await pc.setRemoteDescription(data.sdp);
-      let sdp = await pc.createAnswer({
-        offerToReceiveAudio: false,
-        offerToReceiveVideo: false,
-      });
-      await pc.setLocalDescription(sdp);
-      io.to(data.receiverSocketID).emit("getReceiverAnswer", {
-        id: data.senderSocketID,
-        sdp,
-      });
     } catch (error) {
       console.log(error);
     }
@@ -301,15 +310,35 @@ io.sockets.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     try {
-      const roomID = socketToRoom[socket.id]?.roomID;
-
-      deleteUser(socket.id, roomID);
-      closeReceiverPC(socket.id);
-      closeSenderPCs(socket.id);
-
-      socket.broadcast.to(roomID).emit("userExit", { id: socket.id });
+      const userInfo = socketToRoom[socket.id];
+      if (userInfo) {
+        const { roomID, username } = userInfo;
+        console.log(`[${roomID}] User ${username} (${socket.id}) disconnected`);
+        
+        // Remove user from room
+        if (users[roomID]) {
+          users[roomID] = users[roomID].filter(user => user.id !== socket.id);
+        }
+        
+        // Clean up socket mapping
+        delete socketToRoom[socket.id];
+        
+        // Clean up peer connections
+        if (receiverPCs[socket.id]) {
+          receiverPCs[socket.id].close();
+          delete receiverPCs[socket.id];
+        }
+        
+        if (senderPCs[socket.id]) {
+          senderPCs[socket.id].forEach(({ pc }) => pc.close());
+          delete senderPCs[socket.id];
+        }
+        
+        // Notify others
+        socket.broadcast.to(roomID).emit("userExit", { id: socket.id });
+      }
     } catch (error) {
-      console.log("error",error);
+      console.error("Error in disconnect:", error);
     }
   });
 });
