@@ -4,10 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "start": "node dist/index.js",
-  "dev": "nodemon src/index.js",
-  "build": "npm run build"
-},
+    "start": "node dist/index.js",
+    "dev": "nodemon src/index.js",
+    "build": "mkdir -p dist && cp src/index.js dist/index.js"
+  },
 
   "engines": {
     "node": "16",
