@@ -22,6 +22,10 @@ const pc_config = {
   ],
 };
 
+app.get("/get",(req,res)=>{
+  res.send("Hello World");
+})
+
 const isIncluded = (array, id) => array.some((item) => item.id === id);
 
 const createReceiverPeerConnection = (socketID, socket, roomID, username) => {
