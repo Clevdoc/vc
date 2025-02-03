@@ -250,7 +250,7 @@ io.sockets.on("connection", (socket) => {
 
       socket.broadcast.to(roomID).emit("userExit", { id: socket.id });
     } catch (error) {
-      console.log(error);
+      console.log("error",error);
     }
   });
 });
