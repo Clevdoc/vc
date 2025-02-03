@@ -21,9 +21,7 @@ const pc_config = {
   iceServers: [
     {
       urls: [
-        "stun:stun.l.google.com:19302",
-        "stun:stun1.l.google.com:19302",
-        "stun:stun2.l.google.com:19302"
+        urls: "stun:13.235.24.137:3478",
       ]
     }
   ]
