@@ -4,11 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon index.js",
-    "dev": "nodemon src/index.ts",
-    "build": "tsc -p .",
-    "postinstall": "npm run build"
-    },
+  "start": "node dist/index.js",
+  "dev": "nodemon src/index.ts",
+  "build": "tsc --traceResolution -p .",
+  "postinstall": "npm run build"
+},
+
   "engines": {
     "node": "16",
     "npm" : "7"
