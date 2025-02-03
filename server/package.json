@@ -7,7 +7,7 @@
     "start": "nodemon index.js",
     "dev": "nodemon src/index.ts",
     "build": "tsc -p .",
-     "postinstall": "npm install node-pre-gyp && npm run build"
+    "postinstall": "npm run build"
     },
   "engines": {
     "node": "16",
