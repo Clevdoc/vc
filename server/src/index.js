@@ -7,7 +7,10 @@ let wrtc = require("wrtc");
 const app = express();
 const server = http.createServer(app);
 
-app.use(cors());
+app.use(cors({
+  origin: "*",  // In production, you should specify your frontend domain
+  methods: ["GET", "POST"]
+}));
 
 let receiverPCs = {};
 let senderPCs = {};
@@ -17,9 +20,13 @@ let socketToRoom = {}; // socketID -> { roomID, username }
 const pc_config = {
   iceServers: [
     {
-      urls: "stun:13.235.24.137:3478",
-    },
-  ],
+      urls: [
+        "stun:stun.l.google.com:19302",
+        "stun:stun1.l.google.com:19302",
+        "stun:stun2.l.google.com:19302"
+      ]
+    }
+  ]
 };
 
 app.get("/get",(req,res)=>{
@@ -148,7 +155,13 @@ const closeSenderPCs = (socketID) => {
   delete senderPCs[socketID];
 };
 
-const io = socketio.listen(server);
+const io = socketio(server, {
+  cors: {
+    origin: "*", // In production, specify your frontend domain
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
 
 io.sockets.on("connection", (socket) => {
   socket.on("joinRoom", (data) => {
