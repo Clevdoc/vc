@@ -54,7 +54,7 @@ const createReceiverPeerConnection = (socketID, socket, roomID, username) => {
           stream: e.streams[0],
           username,
         });
-      } else return;
+      }
     } else {
       users[roomID] = [
         {
@@ -64,15 +64,15 @@ const createReceiverPeerConnection = (socketID, socket, roomID, username) => {
         },
       ];
     }
+    
+    // Log the state after adding user
+    console.log(`[${roomID}] Added user ${username} (${socketID})`);
+    console.log(`[${roomID}] Current users:`, JSON.stringify(users[roomID].map(u => ({id: u.id, username: u.username}))));
 
-    // Emit both id and username when a new user enters
     socket.broadcast.to(roomID).emit("userEnter", {
       id: socketID,
       username,
     });
-
-    console.log(`User ${username} entered room: ${roomID}`);
-    console.log("Current users in room:", users[roomID]);
   };
 
   return pc;
@@ -166,26 +166,39 @@ const io = socketio(server, {
 io.sockets.on("connection", (socket) => {
   socket.on("joinRoom", (data) => {
     try {
-      socketToRoom[socket.id] = { roomID: data.roomID, username: data.username };
+      const { roomID, username } = data;
+      
+      // Store socket mapping immediately
+      socketToRoom[socket.id] = { roomID, username };
+      
+      // Join the room
+      socket.join(roomID);
+      
+      // Get existing users
+      let allUsers = getOtherUsersInRoom(socket.id, roomID);
+      
+      // Initialize room if needed
+      if (!users[roomID]) {
+        users[roomID] = [];
+      }
+      
+      // Log room state
+      console.log(`[${roomID}] User ${username} (${socket.id}) joining. Current users:`, 
+        JSON.stringify(users[roomID].map(u => ({id: u.id, username: u.username}))));
 
-      let allUsers = getOtherUsersInRoom(socket.id, data.roomID);
-
-      // Send initial room join confirmation with username
+      // Send initial room join confirmation
       socket.emit("joinedRoom", {
         id: socket.id,
-        username: data.username,
-        roomID: data.roomID,
+        username: username,
+        roomID: roomID,
       });
 
-      // Make sure usernames are included in allUsers
-      io.to(socket.id).emit("allUsers", {
-        users: allUsers,
-      });
-
-      socket.join(data.roomID);
-      console.log(`User ${data.username} joined room: ${data.roomID}`);
+      // Notify others
+      io.to(socket.id).emit("allUsers", { users: allUsers });
+      
+      console.log(`[${roomID}] Sent existing users to ${username}:`, JSON.stringify(allUsers));
     } catch (error) {
-      console.log(error);
+      console.error("Error in joinRoom:", error);
     }
   });
 
