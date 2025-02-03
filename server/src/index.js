@@ -20,9 +20,7 @@ let socketToRoom = {}; // socketID -> { roomID, username }
 const pc_config = {
   iceServers: [
     {
-      urls: [
-        urls: "stun:13.235.24.137:3478",
-      ]
+      urls: "stun:13.235.24.137:3478"
     }
   ]
 };
@@ -270,6 +268,12 @@ io.sockets.on("connection", (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 8080, () => {
-  console.log("server running on 8080");
+// Add error handling for the server
+server.on('error', (error) => {
+  console.error('Server error:', error);
+});
+
+// Modify the server.listen call to include better error handling
+server.listen(process.env.PORT || 8080, '0.0.0.0', () => {  // Add host binding
+  console.log(`Server running on port ${process.env.PORT || 8080}`);
 });
