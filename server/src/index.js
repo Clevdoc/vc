@@ -93,10 +93,21 @@ const createSenderPeerConnection = (
     });
   };
 
-  const sendUser = users[roomID].find((user) => user.id === senderSocketID);
-  sendUser.stream.getTracks().forEach((track) => {
-    pc.addTrack(track, sendUser.stream);
-  });
+  // Find the sender's stream
+  const sendUser = users[roomID]?.find((user) => user.id === senderSocketID);
+  
+  if (sendUser?.stream) {
+    console.log(`[${roomID}] Adding tracks for user ${username} (${senderSocketID})`);
+    try {
+      sendUser.stream.getTracks().forEach((track) => {
+        pc.addTrack(track, sendUser.stream);
+      });
+    } catch (error) {
+      console.error(`[${roomID}] Error adding tracks:`, error);
+    }
+  } else {
+    console.warn(`[${roomID}] No stream found for user ${username} (${senderSocketID})`);
+  }
 
   return pc;
 };
@@ -174,18 +185,19 @@ io.sockets.on("connection", (socket) => {
         users[roomID] = [];
       }
       
-      // Add user to room if not already present
-      if (!users[roomID].some(user => user.id === socket.id)) {
-        users[roomID].push({
-          id: socket.id,
-          username: username,
-          stream: null // Stream will be added when tracks are received
-        });
-      }
+      // Remove any existing entries for this user
+      users[roomID] = users[roomID].filter(user => user.id !== socket.id);
+      
+      // Add user to room
+      users[roomID].push({
+        id: socket.id,
+        username: username,
+        stream: null // Stream will be added when tracks are received
+      });
       
       // Get existing users (excluding the current user)
       let allUsers = users[roomID]
-        .filter(user => user.id !== socket.id)
+        .filter(user => user.id !== socket.id && user.id) // Only include users with valid IDs
         .map(user => ({
           id: user.id,
           username: user.username
@@ -218,23 +230,26 @@ io.sockets.on("connection", (socket) => {
 
   socket.on("senderOffer", async (data) => {
     try {
-      socketToRoom[data.senderSocketID] = data.roomID;
+      console.log(`[${data.roomID}] Received sender offer from ${data.username} (${data.senderSocketID})`);
+      
       let pc = createReceiverPeerConnection(
         data.senderSocketID,
         socket,
         data.roomID,
         data.username
       );
+      
       await pc.setRemoteDescription(data.sdp);
       let sdp = await pc.createAnswer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true,
       });
       await pc.setLocalDescription(sdp);
+      
       socket.join(data.roomID);
       io.to(data.senderSocketID).emit("getSenderAnswer", { sdp });
     } catch (error) {
-      console.log(error);
+      console.error(`[${data?.roomID}] Error in senderOffer:`, error);
     }
   });
 
